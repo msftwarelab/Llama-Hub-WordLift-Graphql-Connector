@@ -9,27 +9,40 @@ from langchain.chains.question_answering import load_qa_chain
 from base import WordLiftLoader
 
 # Set up the necessary configuration options
-openai.api_key = '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'
-os.environ["OPENAI_API_KEY"] = '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'
+openai.api_key = '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'
+os.environ["OPENAI_API_KEY"] = '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'
 # test_key = "nCemGMTrPM8bZpmC3jyze4gbAJJ6cmO7daualXlkyvU53ciuMeHr0AcKsB8Xva4c"
-# test_key = "B8X6lDceXhDO5aVg86npbFavLcQtnNhII35GolV8HlDdY5Tj9jMvTViUBlotsXUc"  # articles
-test_key = "lcG14E9wn0aNNp2whaRhcsbOGrYYJxLOhjGG4Pb2YEJZD7XCik5086cVhqwj7eCc"  # product
+# test_key = "B8X6lDceXhDO5aVg86npbFavLcQtnNhII35GolV8HlDdY5Tj9jMvTViUBlotsXUc"  # articles 1
+# test_key = "UANbeZQ2y06QPv9P7aKFujzPyi8hd79acaYLXPhl1FE18kAUUnL3BBmzJTojLgvM"  # articles 2
+# test_key = "PZYdfvYo0NjH6juRrwCnV7YohszyVt0tt9UBKu4R1HwIMuqyI3LZVWmqvLouuzjv"  # articles 3
+test_key = "X0PARlbAJaLjpuxEoGy4s40MzYi50dqdCv2zoWRdRketAZVEOWvjrX8nxYdgR1nc"  # articles 3
+# test_key = "lcG14E9wn0aNNp2whaRhcsbOGrYYJxLOhjGG4Pb2YEJZD7XCik5086cVhqwj7eCc"  # product
 # test_key = "nCemGMTrPM8bZpmC3jyze4gbAJJ6cmO7daualXlkyvU53ciuMeHr0AcKsB8Xva4c"  # faq
 default_page = 0
-default_rows = 500
+default_rows = 20
 
-fields = "products"
+fields = "entities"
 
-endpoint = "https://api.wordlift.io/graphql"
+endpoint = "https://api.wordlift.io/graphql/"
 headers = {
     "Authorization": f"Key {test_key}",
     "Content-Type": "application/json"
 }
 
-# config_options = {
-#     'text_fields': ['article_url'],
-#     'metadata_fields': ['title', 'article_url']
-# }
+config_options = {
+    "text_fields": ["body"],
+    "metadata_fields": ["url", "headlines", "date"],
+}
+
+query = """
+query {
+	entities{
+		headlines: string(name: "wordpress:title")
+		description: string(name: "schema:description")
+		url: string(name: "wordpress:permalink")
+		body: string(name: "wordpress:content")
+	}
+}"""
 # query = """
 # query {
 #   articles(page: 0, rows: 25) {
@@ -54,27 +67,22 @@ headers = {
 # }
 # """
 
-config_options = {
-    'text_fields': ['description'],
-    'metadata_fields': ['url', 'names']
-}
-query = """
-query {
-  products(page:0, rows:20) {
-    id: iri
-		url: strings(name: "schema:url")
-		gtin: strings(name: "schema:gtin")
-		names: strings(name:"schema:name")
-    description: strings(name:"schema:description")
-    brand: resource(name:"schema:brand"){
-        brand: string(name: "schema:name")
-      }
-		price: resource(name:"schema:offers"){
-        price: string(name: "schema:price")}
-	  image: string(name: "schema:image")
-}
-}
-"""
+# config_options = {
+#     'text_fields': ['name', 'description'],
+#     'metadata_fields': ['url', 'image.image']
+# }
+# query = """
+# query {
+#   products(page:0, rows:10) {
+# 		url: strings(name: "schema:url")
+# 		names: strings(name:"schema:name")
+#     description: strings(name:"schema:description")
+#     image: resource(name: "schema:image") {
+#       image: string(name: "schema:url")
+#     }
+#   }
+# }
+# """
 
 
 # config_options = {
@@ -109,13 +117,13 @@ reader = WordLiftLoader(
 
 # Load the data
 documents = reader.load_data()
-print(documents)
+# print(documents)
 # # Convert the documents
 converted_doc = []
 for doc in documents:
     converted_doc_id = json.dumps(doc.doc_id)
     converted_doc.append(Document(text=doc.text, doc_id=converted_doc_id,
-                         embedding=doc.embedding, doc_hash=doc.doc_hash, extra_info=doc.extra_info))
+                         embedding=doc.embedding, doc_hash=doc.hash, extra_info=doc.extra_info))
 
 # Create the index and query engine
 index = GPTVectorStoreIndex.from_documents(converted_doc)
@@ -133,5 +141,5 @@ query_engine = index.as_query_engine()
 result = query_engine.query("How Does SEO Automation Work?")
 
 # Process the result as needed
-print(result)
+print("=============> result: ", result)
 print(result.get_formatted_sources())
