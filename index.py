@@ -3,6 +3,7 @@ import json
 import openai
 import logging
 import nltk
+import asyncio  # Import asyncio
 from llama_index import VectorStoreIndex, ServiceContext
 from llama_index.readers.schema.base import Document
 from langchain.llms import OpenAI
@@ -39,26 +40,31 @@ query {
 	}
 }"""
 
-reader = WordLiftLoader(
-    endpoint, headers, query, fields, config_options)
 
-documents = reader.load_data()
+async def main():
+    reader = WordLiftLoader(
+        endpoint, headers, query, fields, config_options)
 
-with open('documents.json', 'w') as f:
-    json.dump([doc.__doc__ for doc in documents], f, indent=4)
-converted_doc = []
-for doc in documents:
-    converted_doc_id = json.dumps(doc.doc_id)
-    converted_doc.append(Document(text=doc.text, doc_id=converted_doc_id,
-                         embedding=doc.embedding, doc_hash=doc.hash, extra_info=doc.extra_info))
-with open('converted_doc.json', 'w') as f:
-    json.dump([doc.__dict__ for doc in converted_doc], f, indent=4)
+    documents = await reader.load_data()  # Await the asynchronous load_data method
 
+    with open('documents.json', 'w') as f:
+        json.dump([doc.__doc__ for doc in documents], f, indent=4)
+    converted_doc = []
+    for doc in documents:
+        converted_doc_id = json.dumps(doc.doc_id)
+        converted_doc.append(Document(text=doc.text, doc_id=converted_doc_id,
+                                      embedding=doc.embedding, doc_hash=doc.hash, extra_info=doc.extra_info))
 
-index = VectorStoreIndex.from_documents(converted_doc)
-query_engine = index.as_query_engine()
+    with open('converted_doc.json', 'w') as f:
+        json.dump([doc.__dict__ for doc in converted_doc], f, indent=4)
 
-result = query_engine.query("How Does SEO Automation Work?")
+    index = VectorStoreIndex.from_documents(converted_doc)
+    query_engine = index.as_query_engine()
 
-print("=============> result: ", result)
-print(result.get_formatted_sources())
+    result = query_engine.query("How Does SEO Automation Work?")
+
+    print("=============> result: ", result)
+    print(result.get_formatted_sources())
+
+if __name__ == "__main__":
+    asyncio.run(main())  # Run the asyncio event loop

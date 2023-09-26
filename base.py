@@ -6,12 +6,15 @@ from typing import List
 from urllib.parse import urlparse
 
 import requests
+import asyncio
+import urllib.parse
 from bs4 import BeautifulSoup
 from llama_index.readers.base import BaseReader
 from llama_index.readers.schema.base import Document
 
 DATA_KEY = "data"
 ERRORS_KEY = "errors"
+TIME_OUT = 10
 
 
 class WordLiftLoaderError(Exception):
@@ -66,7 +69,7 @@ class WordLiftLoader(BaseReader):
         self.fields = fields
         self.configure_options = configure_options
 
-    def fetch_data(self) -> dict:
+    async def fetch_data(self) -> dict:
         """
         Fetches data from the WordLift GraphQL API.
 
@@ -78,8 +81,11 @@ class WordLiftLoader(BaseReader):
         """
         try:
             query = self.alter_query()
-            response = requests.post(
-                self.endpoint, json={"query": query}, headers=self.headers
+            response = await asyncio.to_thread(
+                requests.post,
+                self.endpoint,
+                json={"query": query},
+                headers=self.headers,
             )
             response.raise_for_status()
             data = response.json()
@@ -142,11 +148,10 @@ class WordLiftLoader(BaseReader):
                         value = value[0]
                     if is_url(value) and is_valid_html(value):
                         value = value.replace("\n", "")
-                        extra_info[field] = value
                     else:
                         cleaned_value = clean_value(value)
                         cleaned_value = cleaned_value.replace("\n", "")
-                        extra_info[field] = cleaned_value
+                    extra_info[field] = value
                 text = text.replace("\n", "")
                 plain_text = re.sub("<.*?>", "", text)
                 document = Document(text=plain_text, extra_info=extra_info)
@@ -157,7 +162,7 @@ class WordLiftLoader(BaseReader):
             logging.error("Error transforming data:", exc_info=True)
             raise DataTransformError("Error transforming data") from e
 
-    def load_data(self) -> List[Document]:
+    async def load_data(self) -> List[Document]:
         """
         Loads the data by fetching and transforming it.
 
@@ -165,7 +170,7 @@ class WordLiftLoader(BaseReader):
             List[Document]: The list of loaded documents.
         """
         try:
-            data = self.fetch_data()
+            data = await self.fetch_data()
             documents = self.transform_data(data)
             return documents
         except (APICallError, DataTransformError):
@@ -217,8 +222,8 @@ def is_url(text: str) -> bool:
         bool: True if the text is a URL, False otherwise.
     """
     try:
-        result = urlparse(text)
-        return all([result.scheme, result.netloc])
+        parsed_url = urllib.parse.urlparse(text)
+        return all([parsed_url.scheme, parsed_url.netloc])
     except ValueError:
         return False
 
@@ -232,7 +237,7 @@ def is_valid_html(content: str) -> bool:
 
     if is_url(content):
         try:
-            response = requests.get(content)
+            response = requests.get(content, timeout=TIME_OUT)
             if response.status_code == 200:
                 html_content = response.text
                 return (
@@ -244,6 +249,7 @@ def is_valid_html(content: str) -> bool:
         except (
             requests.exceptions.RequestException,
             requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout
         ):
             # If there is a connection error or the URL doesn't resolve, skip it
             return False
@@ -274,7 +280,7 @@ def clean_html(text: str) -> str:
     if isinstance(text, str):
         try:
             if is_url(text):
-                response = requests.get(text)
+                response = requests.get(text, timeout=TIME_OUT)
                 if response.status_code == 200:
                     html_content = response.text
                     soup = BeautifulSoup(html_content, "lxml")
@@ -294,6 +300,7 @@ def clean_html(text: str) -> str:
         except (
             requests.exceptions.RequestException,
             requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout
         ):
             # If there is a connection error or the URL doesn't resolve, skip it
             return ""
